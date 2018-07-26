@@ -1,0 +1,57 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class is Exception is StringObject:
+
+func forError(source as SourceReference, error as string) static as this
+{
+	var v = new this()
+	v.setSource(source)
+	v.setError(error)
+	return v
+}
+
+prop source as SourceReference
+prop error as string
+
+func toString as string
+{
+	var sb = new StringBuilder()
+	if source {
+		var file = source.getFile()
+		if file:
+			sb.append(file.getPath())
+		var line = source.getLine()
+		if line > 0 {
+			sb.append(':')
+			sb.append(String.forInteger(line))
+		}
+		sb.append(": ")
+	}
+	if error:
+		sb.append(error)
+	if source {
+		var lines = source.getLineContent()
+		if lines {
+			sb.append("\n\t")
+			sb.append(lines)
+			sb.append("\n\t^")
+		}
+	}
+	return sb.toString()
+}

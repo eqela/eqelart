@@ -1,0 +1,89 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class:
+
+prop sourceFile as File
+prop executionDirectory as File
+prop properties as map<string,string>
+prop uses as vector<PackageDescription>
+prop functions as vector<ScriptFunction>
+
+func getSourceReference as SourceReference:
+	return SourceReference.forFile(sourceFile)
+
+func getSourcePath as string
+{
+	var v as string
+	if sourceFile:
+		v = sourceFile.getPath()
+	if String.isEmpty(v):
+		v = "none"
+	return v
+}
+
+func getSourceName as string
+{
+	var v as string
+	if sourceFile:
+		v = sourceFile.baseName()
+	if String.isEmpty(v):
+		v = "none"
+	return v
+}
+
+func setProperty(key as string, value as string)
+{
+	assert key
+	if not properties:
+		properties = new map<string,string>
+	properties[key] = value
+}
+
+func getProperty(key as string) as string
+{
+	assert properties
+	assert key
+	return Map.get(properties, key)
+}
+
+func addToUses(pkg as PackageDescription)
+{
+	assert pkg
+	if not uses:
+		uses = new vector<PackageDescription>
+	uses += pkg
+}
+
+func addToFunctions(function as ScriptFunction)
+{
+	assert function
+	if not functions:
+		functions = new vector<ScriptFunction>
+	functions += function
+}
+
+func getFunction(name as string) as ScriptFunction
+{
+	assert name
+	foreach function in functions {
+		if name == function.getName():
+			return function
+	}
+	return null
+}

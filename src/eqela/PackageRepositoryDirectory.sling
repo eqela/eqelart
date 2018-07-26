@@ -1,0 +1,61 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class is PackageRepository:
+
+func forDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	return v
+}
+
+prop directory as File
+
+func getRepositoryName override as string
+{
+	if not directory:
+		return "null"
+	return "file://" .. directory.getPath()
+}
+
+func findInstaller(ctx as LoggingContext, desc as PackageDescription, platform as string) override as object
+{
+	assert desc
+	assert directory
+	var fn = desc.getVendor() .. "_" .. desc.getName() .. "_" .. desc.getVersion() .. "_" .. platform .. ".pkq"
+	var ff = directory.entry(fn)
+	if ff == null || ff.isFile() == false:
+		ff = directory.entry(desc.getVendor()).entry(fn)
+	assert ff && ff.isFile()
+	return ff
+}
+
+func getInstaller(ctx as LoggingContext, desc as PackageDescription, hint as object, listener as function<void,long,long>) override as File:
+	return hint as File
+
+func releaseInstaller(ctx as LoggingContext, file as File) override
+{
+	; // do nothing
+}
+
+func toUrl override as string
+{
+	assert directory
+	return "file://" .. directory.getPath()
+}

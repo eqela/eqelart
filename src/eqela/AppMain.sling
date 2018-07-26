@@ -1,0 +1,523 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class is ConsoleApplicationMain:
+
+import capex.console
+import capex.util
+import capex.web
+
+var exc = new ExecutionContext()
+var platform as string
+var cacheDirectory as File
+
+ctor
+{
+	var cpu = OS.getProcessorType()
+	if String.isEmpty(cpu):
+		cpu = "unknown"
+	if OS.isWindows() {
+		platform = "win-" .. cpu
+	}
+	else if OS.isMacOS() {
+		platform = "macos-" .. cpu
+	}
+	else if OS.isLinux() {
+		platform = "linux-" .. cpu
+	}
+	else {
+		platform = "unknown-" .. cpu
+	}
+	var cp = CurrentProcess.getExecutableFile()
+	if cp {
+		var dd = cp.getParent().entry("cache")
+		if dd.isDirectory():
+			cacheDirectory = dd
+	}
+	if cacheDirectory == null:
+		cacheDirectory = Environment.getApplicationDataDirectory("eqela").entry("cache")
+}
+
+func usage
+{
+	ConsoleApplication.PRINT_HEADER(stdout, null)
+	var info = UsageInfo.forCommand("eqela")
+	info.addFlag("help", "Show help / usage")
+	info.addFlag("version", "Show version")
+	info.addFlag("debug", "Display debug messages")
+	info.addOption("repository", "url", "Add a package repository url")
+	info.addOption("cache", "path", "Specify the path to the local package cache directory")
+	info.addOption("P<vendor:name>", "directory", "Configure a static package path")
+	info.addOption("F<vendor:name>", "version", "Force particular versions of packages to use")
+	info.addOption("platform", "name", "Specify a custom execution platform name")
+	info.addSection("Subcommands")
+	info.addParameter("install", "Install a package (either file or from repository)")
+	info.addParameter("runscript", "Execute a local script")
+	info.addParameter("runcmd", "Run a single command or statement")
+	info.addParameter("rundll", "Execute a dll file")
+	info.addParameter("runpkq", "Execute an Eqela Package (pkq) file")
+	stdout.println(info.toString())
+}
+
+func executeRunscript(args as vector<CommandLineArgument>) private as bool
+{
+	var script as File
+	var function as string
+	var functionParams as vector<string>
+	foreach arg in args {
+		if script && function {
+			if not functionParams:
+				functionParams = new vector<string>
+			functionParams += arg.arg
+			continue
+		}
+		if arg.isParameter() {
+			if script == null {
+				script = File.forPath(arg.parameter)
+				continue
+			}
+			if function == null {
+				function = arg.parameter
+				continue
+			}
+		}
+		arg.reportAsUnsupported(ctx)
+		return false
+	}
+	assert script:
+		Log.error(ctx, "No script defined")
+	Log.debug(ctx, "Reading script: `" .. script.getPath() .. "'")
+	var code = assert ScriptReader.readFile(ctx, script):
+		Log.error(ctx, "Failed to read script: `" .. script.getPath() .. "'")
+	return exc.executeScript(code, function, functionParams)
+}
+
+func doExecuteCommand(acwd as File, cstr as string, arguments as vector<string>) private as bool
+{
+	var cwd = acwd
+	if not cwd:
+		cwd = Environment.getCurrentDirectory()
+	var script = new Script()
+	script.setExecutionDirectory(cwd)
+	var ff = new ScriptFunction()
+	ff.setName("execute")
+	ff.setScript(script)
+	script.addToFunctions(ff)
+	var comps = String.split(cstr, '/', 2)
+	var package = Vector.get(comps, 0)
+	var pcmd = Vector.get(comps, 1)
+	var command as string
+	if String.isEmpty(pcmd) && String.contains(package, ":") == false {
+		command = package
+	}
+	else {
+		var pdesc = assert PackageDescription.forString(package):
+			Log.error(ctx, "Invalid package description: `" .. package .. "'")
+		script.addToUses(pdesc)
+		command = pdesc.getVendor() .. ":" .. pdesc.getName() .. "/" .. pcmd
+	}
+	var stmt = ScriptStatement.forCommand(command)
+	ff.addToStatements(stmt)
+	stmt.setArguments(arguments)
+	return exc.executeScript(script, "execute", new vector<string>)
+}
+
+func executeRuncmd(args as vector<CommandLineArgument>) private as bool
+{
+	var cwd as File
+	var cstr as string
+	var arguments = new vector<string>
+	foreach arg in args {
+		if cstr == null {
+			if arg.isOption("cwd") {
+				cwd = File.forPath(arg.value)
+				continue
+			}
+			cstr = arg.arg
+			continue
+		}
+		arguments += arg.arg
+	}
+	assert String.isNotEmpty(cstr):
+		Log.error(ctx, "No command defined")
+	return doExecuteCommand(cwd, cstr, arguments)
+}
+
+IFDEF "target_netx" {
+	func loadReferencedAssemblies(myAssembly as !"System.Reflection.Assembly", dlldir as File, appdir as File) as bool
+	{
+		assert myAssembly:
+			Log.error(ctx, "Null assembly!")
+		lang "cs" {{{
+			try {
+				var references = myAssembly.GetReferencedAssemblies();
+				foreach(var reference in references) {
+					var fromappdir = false;
+					var reffile = dlldir.entry(reference.Name + ".dll");
+					if(reffile.isFile() == false) {
+						if(appdir != null) {
+							reffile = appdir.entry(reference.Name + ".dll");
+							fromappdir = true;
+						}
+					}
+					if(reffile.isFile() == false) {
+						cape.Log.error(ctx, "Failed to find referenced assembly: `" + reference.Name + "'");
+						return false;
+					}
+					cape.Log.debug(ctx, "Reading referenced assembly: `" + reffile.getPath() + "'");
+					var a2 = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(reffile.getPath());
+					if(a2 == null) {
+						cape.Log.error(ctx, "Failed to load assembly: `" + reffile.getPath() + "'");
+						return false;
+					}
+					if(fromappdir == false) {
+						if(loadReferencedAssemblies(a2, dlldir, appdir) == false) {
+							return false;
+						}
+					}
+				}
+			}
+			catch(System.Exception e) {
+				cape.Log.error(ctx, "Error while loading external references: " + e.ToString());
+				return false;
+			}
+		}}}
+		return true
+	}
+}
+
+func executeRundll(args as vector<CommandLineArgument>) private as bool
+{
+	var dll as File
+	var arguments = new vector<string>
+	foreach arg in args {
+		if dll == null {
+			dll = File.forPath(arg.arg)
+			continue
+		}
+		arguments += arg.arg
+	}
+	assert dll:
+		Log.error(ctx, "No dll file specified.")
+	assert dll.isFile():
+		Log.error(ctx, "Not a file: `" .. dll.getPath() .. "'")
+	var id = dll.getBasenameWithoutExtension()
+	var classname #used = id .. "." .. String.capitalize(id) .. "App"
+	Log.debug(ctx, "Looking for main class `" .. classname .. "' or `App' in DLL: `" .. dll.getPath() .. "'")
+	var argumentsArray = new string[Vector.getSize(arguments)]
+	for(var n=0; n<Vector.getSize(arguments); n++) {
+		argumentsArray[n] = arguments[n]
+	}
+	var dlldir #used = dll.getParent()
+	var appdir as File
+	var appfile = CurrentProcess.getExecutableFile()
+	if appfile:
+		appdir = appfile.getParent()
+	IFDEF "target_netx" {
+		lang "cs" {{{
+			System.Reflection.Assembly myAssembly = null;
+			try {
+				myAssembly = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(dll.getPath());
+				if(myAssembly == null) {
+					cape.Log.error(ctx, "Failed to load assembly: `" + dll.getPath() + "'");
+					return false;
+				}
+			}
+			catch(System.Exception e) {
+				cape.Log.error(ctx, "Error while loading assembly: " + e.ToString());
+				return false;
+			}
+			if(loadReferencedAssemblies(myAssembly, dlldir, appdir) == false) {
+				cape.Log.error(ctx, "Failed to load referenced assemblies.");
+				return false;
+			}
+			System.Type myType = null;
+			try {
+				myType = myAssembly.GetType(classname, true);
+				if(myType == null) {
+					cape.Log.error(ctx, "Failed to find a main class in assembly: `" + dll.getPath() + "'");
+					return false;
+				}
+			}
+			catch(System.Exception e) {
+				cape.Log.error(ctx, "Error while looking for main class: " + e.ToString());
+				return false;
+			}
+			System.Reflection.MethodInfo mainMethod = null;
+			try {
+				mainMethod = myType.GetMethod("Main");
+				if(mainMethod == null) {
+					cape.Log.error(ctx, "Main class `" + classname + "' in assembly does not have `Main' method: `" + dll.getPath() + "'");
+					return false;
+				}
+			}
+			catch(System.Exception e) {
+				cape.Log.error(ctx, "Error while looking for main method: " + e.ToString());
+				return false;
+			}
+			try {
+				var v = mainMethod.Invoke(null, new object[] { argumentsArray });
+				if(v != null && v is int && ((int)v) == 0) {
+					return true;
+				}
+			}
+			catch(System.Exception e) {
+				cape.Log.error(ctx, "Error while executing main method: " + e.ToString());
+			}
+		}}}
+		return false
+	}
+	ELSE {
+		Log.error(ctx, "DLL loading is not supported on this platform.")
+		return false
+	}
+}
+
+func executeInstall(args as vector<CommandLineArgument>) private as bool
+{
+	var installs = new vector<string>
+	foreach arg in args {
+		if arg.isParameter() {
+			installs += arg.parameter
+		}
+		else {
+			arg.reportAsUnsupported(ctx)
+			return false
+		}
+	}
+	foreach install in installs {
+		try {
+			if String.endsWith(install, ".pkq") {
+				exc.installPackageToCacheDirectory(File.forPath(install))
+			}
+			else {
+				exc.installPackage(PackageDescription.forString(install), true)
+			}
+		}
+		catch(e as Exception) {
+			Log.error(ctx, String.asString(e))
+			return false
+		}
+	}
+	return true
+}
+
+func executeRunpkq(args as vector<CommandLineArgument>) private as bool
+{
+	var cwd as File
+	var cstr as string
+	var arguments = new vector<string>
+	foreach arg in args {
+		if cstr == null {
+			if arg.isOption("cwd") {
+				cwd = File.forPath(arg.value)
+				continue
+			}
+			cstr = arg.arg
+			continue
+		}
+		arguments += arg.arg
+	}
+	assert String.isNotEmpty(cstr):
+		Log.error(ctx, "No package file defined")
+	if not cwd:
+		cwd = Environment.getCurrentDirectory()
+	var pkq as File
+	var cmd as string
+	var slash = String.indexOf(cstr, ".pkq/")
+	if slash > 0 {
+		slash += 4
+		pkq = File.forPath(String.getSubString(cstr, 0, slash))
+		cmd = String.getSubString(cstr, slash+1)
+	}
+	else {
+		pkq = File.forPath(cstr)
+		cmd = null
+	}
+	var pdesc as PackageDescription
+	try {
+		pdesc = exc.getPackageDescriptionForFile(pkq)
+		exc.installPackageToCacheDirectory(pkq, pdesc)
+	}
+	catch e as Exception {
+		Log.error(ctx, String.asString(e))
+		return false
+	}
+	var xcmd = pdesc.toString()
+	if cmd:
+		xcmd = xcmd .. "/" .. cmd
+	return doExecuteCommand(cwd, xcmd, arguments)
+}
+
+func executeCommand(cmd as string, cmdArgs as vector<CommandLineArgument>) as bool
+{
+	if cmd == "install":
+		return executeInstall(cmdArgs)
+	if cmd == "runscript":
+		return executeRunscript(cmdArgs)
+	if cmd == "runcmd":
+		return executeRuncmd(cmdArgs)
+	if cmd == "rundll":
+		return executeRundll(cmdArgs)
+	if cmd == "runpkq":
+		return executeRunpkq(cmdArgs)
+	Log.error(ctx, "Unsupported command: `" .. cmd .. "'")
+	return false
+}
+
+func readEnvironmentVariables
+{
+	var plat = Environment.getVariable("EQELA_PLATFORM")
+	if plat:
+		platform = plat
+	var cache = Environment.getVariable("EQELA_CACHE")
+	if cache:
+		cacheDirectory = File.forPath(cache)
+	var fp = Environment.getVariable("EQELA_FORCED_PACKAGES")
+	if fp:
+		exc.setForcedPackagesAsString(fp)
+	var pp = Environment.getVariable("EQELA_PACKAGE_PATH")
+	if pp:
+		exc.setCustomPackagePathsAsString(pp)
+	var rps = Environment.getVariable("EQELA_REPOSITORIES")
+	if rps:
+		exc.setRepositoriesAsString(rps)
+	var debug = Environment.getVariable("EQELA_DEBUG")
+	if debug {
+		if Boolean.asBoolean(debug) {
+			setVerbosityLevel(4)
+		}
+		else {
+			setVerbosityLevel(3)
+		}
+	}
+}
+
+func writeEnvironmentVariables
+{
+	var selfpl = ProcessLauncher.forSelf()
+	if selfpl:
+		Environment.setVariable("EQELA_COMMAND", selfpl.getFullCommandString(false))
+	Environment.setVariable("EQELA_PLATFORM", platform)
+	if cacheDirectory:
+		Environment.setVariable("EQELA_CACHE", cacheDirectory.getPath())
+	var fp = exc.getForcedPackagesAsString()
+	if fp:
+		Environment.setVariable("EQELA_FORCED_PACKAGES", fp)
+	var pp = exc.getCustomPackagePathsAsString()
+	if pp:
+		Environment.setVariable("EQELA_PACKAGE_PATH", pp)
+	var rps = exc.getRepositoriesAsString()
+	if rps:
+		Environment.setVariable("EQELA_REPOSITORIES", rps)
+	Environment.setVariable("EQELA_DEBUG", String.forBoolean(ctx.isInDebugMode()))
+}
+
+func execute override as bool
+{
+	readEnvironmentVariables()
+	foreach arg in args {
+		if arg.isFlag("debug") {
+			setVerbosityLevel(4)
+		}
+		else if arg.isOption("cache") {
+			cacheDirectory = File.forPath(arg.value)
+		}
+		else if arg.isOption("platform") {
+			platform = arg.value
+		}
+		else if arg.isParameter() {
+			break
+		}
+	}
+	Log.debug(ctx, "Using cache directory: `" .. cacheDirectory.getPath() .. "'")
+	exc.setCtx(ctx)
+	exc.setCacheDirectory(cacheDirectory)
+	if Vector.isEmpty(exc.getRepositories()):
+		exc.addToRepositories(PackageRepository.forUrl("http://qx.eqela.com"))
+	var command as string
+	var commandArgs = new vector<CommandLineArgument>
+	foreach arg in args {
+		if command {
+			commandArgs += arg
+			continue
+		}
+		if arg.isFlag("debug") || arg.isOption("cache") || arg.isOption("platform") {
+			; // handled above
+		}
+		else if arg.isFlag("help") || arg.isFlag("h") {
+			usage()
+			return true
+		}
+		else if arg.isFlag("version") || arg.isFlag("v") {
+			PRINT VALUE "version"
+			return true
+		}
+		else if arg.isOption("repository") {
+			exc.addToRepositories(PackageRepository.forUrl(arg.value))
+		}
+		else if arg.isOption() && String.startsWith(arg.key, "P") {
+			exc.addToCustomPackagePaths(String.getSubString(arg.key, 1), File.forPath(arg.value))
+		}
+		else if arg.isOption() && String.startsWith(arg.key, "F") {
+			exc.addToForcedPackages(String.getSubString(arg.key, 1), arg.value)
+		}
+		else if arg.isParameter() {
+			var dd = File.forPath(arg.parameter)
+			var bqx = dd.entry("build.qx")
+			if dd.isDirectory() && bqx.isFile() {
+				command = "runscript"
+				arg.parameter = bqx.getPath()
+				commandArgs += arg
+			}
+			else if String.endsWith(arg.parameter, ".qx") {
+				command = "runscript"
+				commandArgs += arg
+			}
+			else if String.endsWith(arg.parameter, ".dll") {
+				command = "rundll"
+				commandArgs += arg
+			}
+			else if String.indexOf(arg.parameter, ':') >= 0 {
+				command = "runcmd"
+				commandArgs += arg
+			}
+			else if String.endsWith(arg.parameter, ".pkq") || String.indexOf(arg.parameter, ".pkq/") > 0 {
+				command = "runpkq"
+				commandArgs += arg
+			}
+			else {
+				command = arg.parameter
+			}
+		}
+		else {
+			arg.reportAsUnsupported(ctx)
+			return false
+		}
+	}
+	if String.isEmpty(command) {
+		usage()
+		return false
+	}
+	exc.setPlatform(platform)
+	writeEnvironmentVariables()
+	return executeCommand(command, commandArgs)
+}
+
+main:
+	return executeMain(new this(), args)

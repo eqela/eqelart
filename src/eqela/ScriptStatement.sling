@@ -1,0 +1,46 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class:
+
+func forCommand(command as string) static as this
+{
+	var v = new this()
+	v.setCommand(command)
+	return v
+}
+
+prop source as SourceReference
+prop command as string
+prop arguments as vector<string>
+
+func addToArguments(argument as string) as this
+{
+	if argument {
+		if not arguments:
+			arguments = new vector<string>
+		arguments += argument
+	}
+	return this
+}
+
+func getArgument(index as int) as string
+{
+	assert arguments
+	return Vector.get(arguments, index)
+}

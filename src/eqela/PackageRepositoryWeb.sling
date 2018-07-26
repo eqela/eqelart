@@ -1,0 +1,131 @@
+
+/*
+ * This file is part of Eqela CLI
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+class is PackageRepository:
+
+import capex.web
+
+func forUrl(url as string) static as this
+{
+	var v = new this()
+	v.setUrl(url)
+	return v
+}
+
+prop url as string
+var contentCache = new map<string,string>
+var webClient as WebClient
+
+ctor
+{
+	webClient = NativeWebClient.instance()
+}
+
+func toFileName(desc as PackageDescription, platform as string) private as string
+{
+	var sb = new StringBuilder()
+	sb.append(desc.getVendor())
+	sb.append('_')
+	sb.append(desc.getName())
+	sb.append('_')
+	sb.append(desc.getVersion())
+	sb.append('_')
+	sb.append(platform)
+	sb.append(".pkq")
+	return sb.toString()
+}
+
+func getRepositoryName override as string:
+	return url
+
+func findInstaller(ctx as LoggingContext, desc as PackageDescription, platform as string) override as object
+{
+	assert desc
+	assert webClient:
+		Log.error(ctx, "No web client. Cannot perform network queries.")
+	var vendor = assert desc.getVendor():
+		Log.error(ctx, "No vendor for package: `" .. desc.toString() .. "'")
+	var v as string
+	var myurl = url .. "/" .. vendor
+	Log.status(ctx, "Checking for package `" .. desc.toString() .. "' for platform `" .. platform .. "' in: `" .. myurl .. "'..")
+	var content as string
+	if contentCache:
+		content = Map.get(contentCache, myurl)
+	if content == null {
+		webClient.query("GET", myurl, null, null, func(status as string, headers as KeyValueList<string,string>, body as buffer) {
+			Log.debug(ctx, "Retrieving URL `" .. myurl .. "'..")
+			content = String.forUTF8Buffer(body)
+			if content {
+				Log.debug(ctx, "Received content: `" .. content .. "'")
+				Map.set(contentCache, myurl, content)
+			}
+		})
+	}
+	else {
+		Log.debug(ctx, "Using cached content: `" .. content .. "'")
+	}
+	assert content:
+		Log.error(ctx, "Failed to get package index for url: `" .. myurl .. "'")
+	var name = toFileName(desc, platform)
+	var lookFor = "href=\"" .. name .. "\""
+	if String.contains(content, lookFor) {
+		v = myurl .. "/" .. name
+	}
+	Log.status(ctx, null)
+	Log.debug(ctx, "findInstaller `" .. desc.toString() .. "': " ..v)
+	return v
+}
+
+func getInstaller(ctx as LoggingContext, desc as PackageDescription, hint as object, listener as function<void,long,long>) override as File
+{
+	assert desc
+	assert webClient
+	var furl = assert hint as string:
+		Log.error(ctx, "No package URL was found")
+	var v as File
+	Log.status(ctx, "Downloading package: `" .. furl .. "'..")
+	Log.debug(ctx, "Retrieving URL `" .. furl .. "'..")
+	webClient.query("GET", furl, null, null, func(status as string, headers as KeyValueList<string,string>, body as buffer) {
+		assert status == "200":
+			Log.error(ctx, "Received HTTP status " .. status)
+		assert body:
+			Log.error(ctx, "Failed to receive content")
+		var ff = TemporaryFile.create()
+		assert ff.setContentsBuffer(body):
+			Log.error(ctx, "Failed to write temporary file: `" .. ff.getPath() .. "'")
+		v = ff
+	})
+	Log.status(ctx, null)
+	if v {
+		Log.debug(ctx, "Downloaded temporary file for package `" .. desc.toString() .. "': `" .. v.getPath() .. "'")
+	}
+	else {
+		Log.debug(ctx, "Failed to download package installer: `" .. desc.toString() .. "'")
+	}
+	return v
+}
+
+func releaseInstaller(ctx as LoggingContext, file as File) override
+{
+	assert file
+	Log.debug(ctx, "Removing temporary file: `" .. file.getPath() .. "'")
+	file.remove()
+}
+
+func toUrl override as string:
+	return url

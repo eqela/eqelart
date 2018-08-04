@@ -368,6 +368,11 @@ func executeFunctionCallExpression(source as SourceReference, function as string
 	else if function == "getDateString" {
 		return DateTime.forNow().toStringDate(0 as char)
 	}
+	else if function == "getSystemCommandPath" {
+		var cmd = assert Vector.get(args, 0)
+		var ff = assert Environment.findCommand(cmd)
+		return ff.getPath()
+	}
 	else {
 		throw ScriptException.forError(source, "Call to unsupported function: `" .. function .. "'")
 	}

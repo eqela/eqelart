@@ -16,12 +16,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-use eqela:slingc:r316
-use eqela:jsh:r2
+use eqela:slingc:r319
+use eqela:jsh:r3
 use eqela:dotnet:2.1.301
 use eqela:builder:r4
-use eqela:jkop:20180726
-set version 5.0b2
+use eqela:jkop:20180804
+set version 5.0b3
 set name eqela
 
 main {

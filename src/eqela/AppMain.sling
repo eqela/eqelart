@@ -159,6 +159,39 @@ func executeRuncmd(args as vector<CommandLineArgument>) private as bool
 }
 
 IFDEF "target_netx" {
+	func getRuntimeDllDir(origdir as File) as File
+	{
+		assert origdir
+		var runtimes = origdir.entry("runtimes")
+		assert runtimes.isDirectory()
+		var osdir as File
+		var cpu = OS.getProcessorType()
+		if String.isEmpty(cpu):
+			cpu = "unknown"
+		if OS.isMacOS() {
+			osdir = runtimes.entry("osx")
+		}
+		else if OS.isWindows() {
+			osdir = runtimes.entry("win-" .. cpu)
+		}
+		else if OS.isLinux() {
+			osdir = runtimes.entry("linux-" .. cpu)
+		}
+		assert osdir
+		assert osdir.isDirectory()
+		var libdir = osdir.entry("lib")
+		assert libdir.isDirectory()
+		var it = libdir.entries()
+		loop {
+			var v = it.next()
+			if not v:
+				break
+			if v.isDirectory():
+				return v
+		}
+		return null
+	}
+
 	func loadReferencedAssemblies(myAssembly as !"System.Reflection.Assembly", dlldir as File, appdir as File) as bool
 	{
 		assert myAssembly:
@@ -169,6 +202,15 @@ IFDEF "target_netx" {
 				foreach(var reference in references) {
 					var fromappdir = false;
 					var reffile = dlldir.entry(reference.Name + ".dll");
+					if(reffile.isFile() == false) {
+						var rtdir = getRuntimeDllDir(dlldir);
+						if(rtdir != null) {
+							var ff = rtdir.entry(reference.Name + ".dll");
+							if(ff.isFile()) {
+								reffile = ff;
+							}
+						}
+					}
 					if(reffile.isFile() == false) {
 						if(appdir != null) {
 							reffile = appdir.entry(reference.Name + ".dll");

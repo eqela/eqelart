@@ -1,6 +1,6 @@
 
 #
-# This file is part of Eqela CLI
+# This file is part of Eqela Runtime
 # Copyright (c) 2018 Eqela Oy
 #
 # This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,7 @@ use eqela:dotnet:2.1.301
 use eqela:builder:r4
 use eqela:jkop:20180804
 set version 5.0b3
-set name eqela
+set name eqelart
 
 main {
 	call clean
@@ -56,7 +56,7 @@ buildEqelaRelease {
 
 buildEqelaReleaseForPlatform {
 	info
-	info Building Eqela CLI for target platform: ${platform}
+	info Building Eqela Runtime for target platform: ${platform}
 	info
 	eqela:jsh delete build/eqela/${platform}
 	eqela:slingc src/eqela -target=netcore -Dsling_project_version=${version} -libdir=${eqela:jkop}/src \

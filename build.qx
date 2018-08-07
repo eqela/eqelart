@@ -16,12 +16,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-use eqela:slingc:r319
-use eqela:jsh:r3
+use eqela:slingc:r321
+use eqela:jsh:r4
 use eqela:dotnet:2.1.301
-use eqela:builder:r4
-use eqela:jkop:20180804
-set version 5.0b3
+use eqela:rocks:r4
+use eqela:jkop:20180807
+set version 5.0.0
 set name eqelart
 
 main {
@@ -61,13 +61,23 @@ buildEqelaReleaseForPlatform {
 	eqela:jsh delete build/eqela/${platform}
 	eqela:slingc src/eqela -target=netcore -Dsling_project_version=${version} -libdir=${eqela:jkop}/src \
 		-output=build/eqela/${platform} -OstaticBuild=true -Brelease=true -Btarget=${platform} \
-		-builder=${=expandCommand(eqela:builder)} -BdotnetPath=${eqela:dotnet}
+		-builder=${=expandCommand(eqela:rocks/builder)} -BdotnetPath=${eqela:dotnet}
 	eqela:jsh cpto build/eqela/${name}_${version}_${platform} \
 		build/eqela/${platform}/*.dll \
 		build/eqela/${platform}/*.so \
 		build/eqela/${platform}/*.dylib \
 		build/eqela/${platform}/eqela \
 		build/eqela/${platform}/eqela.exe
+	eqela:jsh writeJsonMap build/eqela/${name}_${version}_${platform}/packageinfo.json \
+		vendor=eqela \
+		name=${name} \
+		version=${version} \
+		description="Eqela Runtime" \
+		authorName=Eqela \
+		authorEmail=contact@eqela.com \
+		title="Eqela Runtime" \
+		platform=${platform} \
+		executables=eqela
 	eqela:jsh delete build/eqela/${name}_${version}_${platform}/sling.module
 	eqela:jsh delete build/eqela/${name}_${version}_${platform}/src
 	eqela:jsh ${pkgcmd} build/eqela/${name}_${version}_${platform}

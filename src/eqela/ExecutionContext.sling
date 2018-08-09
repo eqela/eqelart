@@ -294,7 +294,7 @@ func parseCommand(source as SourceReference, command as string) as ParsedCommand
 	return v
 }
 
-func expandCommand(source as SourceReference, pc as ParsedCommand, props as map<string,string>) as ProcessLauncher
+func expandCommandFile(source as SourceReference, pc as ParsedCommand, props as map<string,string>) as File
 {
 	if not pc:
 		throw ScriptException.forError(source, "Null ParsedCommand!")
@@ -310,40 +310,38 @@ func expandCommand(source as SourceReference, pc as ParsedCommand, props as map<
 		throw ScriptException.forError(source, "Package directory does not exist: `" .. dir.getPath() .. "'")
 	var dll = dir.entry(pcmd .. ".dll")
 	Log.debug(ctx, "Checking dll: `" .. dll.getPath() .. "'")
-	if dll.isFile() {
-		var pl = ProcessLauncher.forSelf()
-		if not pl:
-			throw ScriptException.forError(source, "Failed to create self-process launcher")
-		pl.addToParams(dll.getPath())
-		return pl
-	}
+	if dll.isFile():
+		return dll
 	var qx = dir.entry(pcmd .. ".qx")
 	Log.debug(ctx, "Checking qx: `" .. qx.getPath() .. "'")
-	if qx.isFile() {
+	if qx.isFile():
+		return qx
+	var binxf = dir.entry("bin").entry(pcmd).asExecutable()
+	Log.debug(ctx, "Checking executable: `" .. binxf.getPath() .. "'")
+	if binxf.isFile():
+		return binxf
+	var binf = dir.entry(pcmd).asExecutable()
+	Log.debug(ctx, "Checking executable: `" .. binf.getPath() .. "'")
+	if binf.isFile():
+		return binf
+	throw ScriptException.forError(source, "No such command: `" .. pc.getCstr() .. "'")
+	return null
+}
+
+func expandCommand(source as SourceReference, pc as ParsedCommand, props as map<string,string>) as ProcessLauncher
+{
+	var cf = assert expandCommandFile(source, pc, props)
+	if cf.hasExtension("dll") || cf.hasExtension("qx") {
 		var pl = ProcessLauncher.forSelf()
 		if not pl:
 			throw ScriptException.forError(source, "Failed to create self-process launcher")
-		pl.addToParams(qx.getPath())
+		pl.addToParams(cf.getPath())
 		return pl
 	}
-	var binxf = dir.entry("bin").entry(pcmd).asExecutable()
-	Log.debug(ctx, "Checking executable: `" .. binxf.getPath() .. "'")
-	if binxf.isFile() {
-		var pl = ProcessLauncher.forFile(binxf)
-		if not pl:
-			throw ScriptException.forError(source, "Failed to create process launcher for file: `" .. binxf.getPath() .. "'")
-		return pl
-	}
-	var binf = dir.entry(pcmd).asExecutable()
-	Log.debug(ctx, "Checking executable: `" .. binf.getPath() .. "'")
-	if binf.isFile() {
-		var pl = ProcessLauncher.forFile(binf)
-		if not pl:
-			throw ScriptException.forError(source, "Failed to create process launcher for file: `" .. binf.getPath() .. "'")
-		return pl
-	}
-	throw ScriptException.forError(source, "No such command: `" .. pc.getCstr() .. "'")
-	return null
+	var pl = ProcessLauncher.forFile(cf)
+	if not pl:
+		throw ScriptException.forError(source, "Failed to create process launcher for file: `" .. cf.getPath() .. "'")
+	return pl
 }
 
 func executeFunctionCallExpression(source as SourceReference, function as string, props as map<string,string>, args as vector<string>) as string
@@ -364,6 +362,11 @@ func executeFunctionCallExpression(source as SourceReference, function as string
 		var pc = assert parseCommand(source, Vector.get(args, 0))
 		var pl = assert expandCommand(source, pc, props)
 		return pl.getFullCommandString(false)
+	}
+	else if function == "expandCommandFile" {
+		var pc = assert parseCommand(source, Vector.get(args, 0))
+		var pl = assert expandCommandFile(source, pc, props)
+		return pl.getPath()
 	}
 	else if function == "getDateString" {
 		return DateTime.forNow().toStringDate(0 as char)

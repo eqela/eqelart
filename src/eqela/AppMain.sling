@@ -453,8 +453,11 @@ func readEnvironmentVariables
 func writeEnvironmentVariables
 {
 	var selfpl = ProcessLauncher.forSelf()
-	if selfpl:
-		Environment.setVariable("EQELA_COMMAND", selfpl.getFullCommandString(false))
+	if selfpl {
+		var ss = selfpl.getFullCommandString(false)
+		Environment.setVariable("EQELA_COMMAND", ss)
+		Environment.setVariable("EQELA_RUNTIME", ss)
+	}
 	Environment.setVariable("EQELA_PLATFORM", platform)
 	if cacheDirectory:
 		Environment.setVariable("EQELA_CACHE", cacheDirectory.getPath())

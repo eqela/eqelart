@@ -16,11 +16,11 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-use eqela:slingc:r321
+use eqela:slingc:r322
 use eqela:jsh:r4
 use eqela:dotnet:2.1.301
 use eqela:rocks:r4
-use eqela:jkop:20180807
+use eqela:jkop:20180809
 set version 5.0.0
 set name eqelart
 

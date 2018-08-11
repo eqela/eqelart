@@ -192,7 +192,7 @@ IFDEF "target_netx" {
 		return null
 	}
 
-	func loadReferencedAssemblies(myAssembly as !"System.Reflection.Assembly", dlldir as File, appdir as File) as bool
+	func loadReferencedAssemblies(myAssembly as !"System.Reflection.Assembly", dlldir as File, appdir as File, ss as StringSet) as bool
 	{
 		assert myAssembly:
 			Log.error(ctx, "Null assembly!")
@@ -201,6 +201,10 @@ IFDEF "target_netx" {
 				var references = myAssembly.GetReferencedAssemblies();
 				foreach(var reference in references) {
 					var fromappdir = false;
+					if(ss.contains(reference.Name)) {
+						continue;
+					}
+					ss.add(reference.Name);
 					var reffile = dlldir.entry(reference.Name + ".dll");
 					if(reffile.isFile() == false) {
 						var rtdir = getRuntimeDllDir(dlldir);
@@ -228,7 +232,7 @@ IFDEF "target_netx" {
 						return false;
 					}
 					if(fromappdir == false) {
-						if(loadReferencedAssemblies(a2, dlldir, appdir) == false) {
+						if(loadReferencedAssemblies(a2, dlldir, appdir, ss) == false) {
 							return false;
 						}
 					}
@@ -271,6 +275,7 @@ func executeRundll(args as vector<CommandLineArgument>) private as bool
 	if appfile:
 		appdir = appfile.getParent()
 	IFDEF "target_netx" {
+		var ss #used = new StringSet()
 		lang "cs" {{{
 			System.Reflection.Assembly myAssembly = null;
 			try {
@@ -284,7 +289,7 @@ func executeRundll(args as vector<CommandLineArgument>) private as bool
 				cape.Log.error(ctx, "Error while loading assembly: " + e.ToString());
 				return false;
 			}
-			if(loadReferencedAssemblies(myAssembly, dlldir, appdir) == false) {
+			if(loadReferencedAssemblies(myAssembly, dlldir, appdir, ss) == false) {
 				cape.Log.error(ctx, "Failed to load referenced assemblies.");
 				return false;
 			}

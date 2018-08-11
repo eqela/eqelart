@@ -21,6 +21,8 @@ class:
 prop script as Script
 prop name as string
 prop statements as vector<ScriptStatement>
+prop source as SourceReference
+prop parameters as vector<string>
 
 func addToStatements(stmt as ScriptStatement)
 {
@@ -28,4 +30,14 @@ func addToStatements(stmt as ScriptStatement)
 	if not statements:
 		statements = new vector<ScriptStatement>
 	statements += stmt
+}
+
+func hasParameter(param as string) as bool
+{
+	assert param
+	foreach pp in parameters {
+		if pp == param:
+			return true
+	}
+	return false
 }

@@ -64,11 +64,21 @@ func tryReadFile(file as File, code as Script) static
 		}
 		else {
 			if String.endsWith(line, "{") {
-				var fname = String.strip(String.getSubString(line, 0, String.getLength(line)-1))
+				var defs = String.strip(String.getSubString(line, 0, String.getLength(line)-1))
+				var comps = String.split(defs, ':', 2)
+				var fname = String.strip(Vector.get(comps, 0))
 				if String.isEmpty(fname):
 					throw ScriptException.forError(src, "Invalid function name: `" .. fname .. "'")
+				var params = new vector<string>
+				foreach pp in String.split(Vector.get(comps, 1), ' ') {
+					var s = String.strip(pp)
+					if String.isNotEmpty(s):
+						params += s
+				}
 				function = new ScriptFunction()
 				function.setName(fname)
+				function.setSource(src)
+				function.setParameters(params)
 				code.addToFunctions(function)
 				continue
 			}

@@ -256,13 +256,13 @@ func installPackage(desc as PackageDescription, force as bool = false)
 	throw ExceptionWithString.forString("Package not found: `" .. desc.toString() .. "'")
 }
 
-func executeScriptFileFunction(cwd as File,file as File, function as string, args as vector<string>)
+func executeScriptFileFunction(cwd as File, file as File, function as string, args as vector<string>) as bool
 {
 	var v = new Script()
 	v.setSourceFile(file)
 	v.setExecutionDirectory(cwd)
 	ScriptReader.tryReadFile(file, v)
-	executeScript(v, function, args)
+	return executeScript(v, function, args)
 }
 
 class ParsedCommand public
@@ -328,17 +328,22 @@ func expandCommandFile(source as SourceReference, pc as ParsedCommand, props as 
 	return null
 }
 
+func getProcessLauncherForFile(file as File) as ProcessLauncher
+{
+	assert file
+	if file.hasExtension("dll") || file.hasExtension("qx") {
+		var pl = assert ProcessLauncher.forSelf()
+		pl.addToParams(file.getPath())
+		return pl
+	}
+	var pl = assert ProcessLauncher.forFile(file)
+	return pl
+}
+
 func expandCommand(source as SourceReference, pc as ParsedCommand, props as map<string,string>) as ProcessLauncher
 {
 	var cf = assert expandCommandFile(source, pc, props)
-	if cf.hasExtension("dll") || cf.hasExtension("qx") {
-		var pl = ProcessLauncher.forSelf()
-		if not pl:
-			throw ScriptException.forError(source, "Failed to create self-process launcher")
-		pl.addToParams(cf.getPath())
-		return pl
-	}
-	var pl = ProcessLauncher.forFile(cf)
+	var pl = getProcessLauncherForFile(cf)
 	if not pl:
 		throw ScriptException.forError(source, "Failed to create process launcher for file: `" .. cf.getPath() .. "'")
 	return pl
@@ -375,6 +380,14 @@ func executeFunctionCallExpression(source as SourceReference, function as string
 		var cmd = assert Vector.get(args, 0)
 		var ff = assert Environment.findCommand(cmd)
 		return ff.getPath()
+	}
+	else if function == "getEqelaRuntimePath" {
+		var selfpl = assert ProcessLauncher.forSelf()
+		return selfpl.getFullCommandString(false)
+	}
+	else if function == "getEnvironmentVariable" {
+		var varname = assert Vector.get(args, 0)
+		return Environment.getVariable(varname)
 	}
 	else {
 		throw ScriptException.forError(source, "Call to unsupported function: `" .. function .. "'")
@@ -489,16 +502,24 @@ func processStatement(statement as ScriptStatement, props as map<string,string>,
 	var args = new vector<string>
 	foreach arg in statement.getArguments() {
 		var s = processExpression(statement.getSource(), arg, props)
-		if s == "$(*)" {
-			foreach oarg in oargs:
-				args += oarg
-		}
-		else if String.startsWith(s, "$(") && String.endsWith(s, ")") {
-			var i = String.toInteger(String.getSubString(s, 2, String.getLength(s) - 3))
-			if i >= 0 {
-				var c = Vector.getSize(oargs)
-				for(var n=i; n<c; n++):
-					args += Vector.get(oargs, n)
+		if String.startsWith(s, "$(") && String.endsWith(s, ")") {
+			var xpr = String.getSubString(s, 2, String.getLength(s) - 3)
+			if xpr == "*" {
+				foreach oarg in oargs:
+					args += oarg
+			}
+			else if String.endsWith(xpr, "..") {
+				var i = String.toInteger(String.getSubString(xpr, 0, String.getLength(xpr)-2)) - 1
+				if i >= 0 {
+					var c = Vector.getSize(oargs)
+					for(var n=i; n<c; n++):
+						args += Vector.get(oargs, n)
+				}
+			}
+			else {
+				var aa = Vector.get(oargs, String.toInteger(xpr) - 1)
+				if aa:
+					args += aa
 			}
 		}
 		else {
@@ -509,48 +530,43 @@ func processStatement(statement as ScriptStatement, props as map<string,string>,
 	return v
 }
 
-func executeScriptFunction(script as Script, functionName as string, oprops as map<string,string>, args as vector<string>) private
+func getScriptFunction(script as Script, functionName as string) private as ScriptFunction
 {
+	assert script
 	var functions = script.getFunctions()
-	if Vector.getSize(functions) < 1:
-		throw ExceptionWithString.forString("Script has no functions")
-	var function as ScriptFunction
-	if String.isEmpty(functionName) {
-		var functions = script.getFunctions()
-		function = Vector.get(functions, 0)
-		if function == null:
-			throw ExceptionWithString.forString("Failed to get the default function!")
-	}
-	else {
-		function = script.getFunction(functionName)
-		if function == null:
-			throw ExceptionWithString.forString("No such function: `" .. functionName .. "'")
-	}
+	assert Vector.getSize(functions) > 0
+	if String.isEmpty(functionName):
+		return Vector.get(functions, 0)
+	return script.getFunction(functionName)
+}
+
+func executeScriptFunction(script as Script, function as ScriptFunction, oprops as map<string,string>, args as vector<string>) private
+{
 	var props = new map<string,string>
 	if oprops {
 		foreach key in Map.getKeys(oprops) as! vector<string>:
 			props[key] = oprops[key]
 	}
+	var nargs = new vector<string>
 	if args {
 		var counter = 1
 		foreach arg in args {
 			if String.contains(arg, "=") {
 				var comps = String.split(arg, '=', 2)
 				var key = Vector.get(comps, 0)
-				var val = Vector.get(comps, 1)
-				if String.isEmpty(key):
-					throw ScriptException.forError(null, "Invalid argument with empty key: `" .. arg .. "'")
-				props[key] = val
+				if String.isNotEmpty(key) && function.hasParameter(key) {
+					props[key] = Vector.get(comps, 1)
+					continue
+				}
 			}
-			else {
-				props[String.forInteger(counter++)] = arg
-			}
+			props[String.forInteger(counter++)] = arg
+			nargs += arg
 		}
 	}
 	Log.debug(ctx, "Executing function `" .. function.getName() .. "' from script: `" .. script.getSourcePath() .. "'")
 	var cwd = script.getExecutionDirectory()
 	foreach ostatement in function.getStatements() {
-		var statement = processStatement(ostatement, props, args)
+		var statement = processStatement(ostatement, props, nargs)
 		var command = statement.getCommand()
 		var args = statement.getArguments()
 		if command == "exec" {
@@ -569,7 +585,7 @@ func executeScriptFunction(script as Script, functionName as string, oprops as m
 			var cmdf = File.forRelativePath(cmd, cwd).asExecutable()
 			if cmdf.exists() == false:
 				throw ScriptException.forError(statement.getSource(), "Command executable was not found: `" .. cmd .. "'")
-			var pl = ProcessLauncher.forFile(cmdf)
+			var pl = getProcessLauncherForFile(cmdf)
 			if not pl:
 				throw ScriptException.forError(statement.getSource(), "Failed to create process launcher for command: `" .. cmd .. "'")
 			pl.setCwd(cwd)
@@ -578,7 +594,7 @@ func executeScriptFunction(script as Script, functionName as string, oprops as m
 			Log.debug(ctx, "Executing command: `" .. String.asString(pl) .. "'")
 			var v = pl.execute()
 			if v != 0:
-				throw ExceptionWithString.forString("Command `" .. command .. "' returned with errors status `" .. String.forInteger(v) .. "'")
+				throw ExceptionWithString.forString("Command `" .. command .. "' returned with error status `" .. String.forInteger(v) .. "'")
 			continue
 		}
 		if command == "set" {
@@ -594,7 +610,7 @@ func executeScriptFunction(script as Script, functionName as string, oprops as m
 			var val = Vector.get(args, 1)
 			if String.isEmpty(key):
 				throw ScriptException.forError(statement.getSource(), "`setDefault' statement without a key")
-			if Map.get(props, key) == null:
+			if String.isEmpty(Map.get(props, key)):
 				props[key] = val
 			continue
 		}
@@ -615,7 +631,16 @@ func executeScriptFunction(script as Script, functionName as string, oprops as m
 			var nargs = new vector<string>
 			for(var n=1; n<Vector.getSize(args); n++):
 				nargs += Vector.get(args, n)
-			executeScriptFunction(script, fn, oprops, nargs)
+			var function = getScriptFunction(script, fn)
+			if not function:
+				throw ScriptException.forError(statement.getSource(), "Function not found: `" .. fn .. "'")
+			try {
+				executeScriptFunction(script, function, oprops, nargs)
+			}
+			catch e as ScriptException {
+				e.append(ScriptException.forError(statement.getSource(), "Called from here"))
+				throw e
+			}
 			continue
 		}
 		if command == "info" {
@@ -643,7 +668,8 @@ func executeScriptFunction(script as Script, functionName as string, oprops as m
 		var packageDirectory = File.forPath(Map.get(props, package))
 		var xf = packageDirectory.entry(pcmd .. ".qx")
 		if xf.isFile() {
-			executeScriptFileFunction(cwd, xf, null, args)
+			if not executeScriptFileFunction(cwd, xf, null, args):
+				throw ScriptException.forError(statement.getSource(), "Execution of external script function failed")
 			continue
 		}
 		var pl = expandCommand(statement.getSource(), pc, props)
@@ -765,7 +791,22 @@ func doExecuteScript(script as Script, function as string, args as vector<string
 		if cc == 0:
 			break
 	}
-	executeScriptFunction(script, function, props, args)
+	var fo = getScriptFunction(script, function)
+	if not fo {
+		if String.isEmpty(function) {
+			throw ScriptException.forError(script.getSourceReference(), "No default function")
+		}
+		else {
+			throw ScriptException.forError(script.getSourceReference(), "Function not found: `" .. function .. "'")
+		}
+	}
+	try {
+		executeScriptFunction(script, fo, props, args)
+	}
+	catch e as ScriptException {
+		e.append(ScriptException.forError(fo.getSource(), "Called from here"))
+		throw e
+	}
 }
 
 func executeScript(script as Script, function as string, args as vector<string>) as bool
@@ -777,7 +818,16 @@ func executeScript(script as Script, function as string, args as vector<string>)
 		doExecuteScript(script, function, args)
 	}
 	catch e as Exception {
-		Log.error(ctx, String.asString(e))
+		if e is ScriptException {
+			var p = e as! ScriptException
+			while p {
+				Log.error(ctx, String.asString(p))
+				p = p.getNext()
+			}
+		}
+		else {
+			Log.error(ctx, String.asString(e))
+		}
 		v = false
 	}
 	return v

@@ -28,6 +28,20 @@ func forError(source as SourceReference, error as string) static as this
 
 prop source as SourceReference
 prop error as string
+prop next as this
+
+func append(exception as this)
+{
+	var o = this
+	loop {
+		var n = o.getNext()
+		if not n {
+			o.setNext(exception)
+			break
+		}
+		o = n
+	}
+}
 
 func toString as string
 {

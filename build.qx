@@ -16,12 +16,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-use eqela:slingc:r324
+use eqela:slingc:r326
 use eqela:jsh:r4
 use eqela:dotnet:2.1.301
-use eqela:rocks:r4
-use eqela:jkop:20180811
-set version 5.0.1
+use eqela:rocks:r7
+use eqela:jkop:20181106
+set version 5.0.2
 set name eqelart
 
 main {
@@ -31,6 +31,10 @@ main {
 
 buildForLinux {
 	call buildEqelaReleaseForPlatform platform=linux-x64 pkgcmd=tardir $(*)
+}
+
+buildForAlpine {
+	call buildEqelaReleaseForPlatform platform=alpine-x64 pkgcmd=tardir $(*)
 }
 
 buildForWin32 {

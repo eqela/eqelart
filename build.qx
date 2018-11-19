@@ -16,13 +16,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-use eqela:slingc:r326
+use eqela:slingc:r330
 use eqela:jsh:r4
 use eqela:dotnet:2.1.301
 use eqela:rocks:r7
-use eqela:jkop:20181106
+use eqela:jkop:20181118
 set version 5.0.2
 set name eqelart
+set title "Eqela Runtime"
+set copyright "Copyright (c) 2018 Eqela Oy"
+set license "Licensed under GPLv3 (see LICENSE for details)"
 
 main {
 	call clean
@@ -64,16 +67,26 @@ buildEqelaReleaseForPlatform : platform pkgcmd {
 	info
 	info Building Eqela Runtime ${version} for target platform: ${platform}
 	info
-	eqela:jsh delete build/eqela/${platform}
-	eqela:slingc src/eqela -target=netcore -Dsling_project_version=${version} -libdir=${eqela:jkop}/src \
-		-output=build/eqela/${platform} -OstaticBuild=true -Brelease=true -Btarget=${platform} \
-		-builder=${=expandCommand(eqela:rocks/builder)} -BdotnetPath=${eqela:dotnet} $(*)
+	set output build/eqela/${platform}
+	eqela:jsh delete ${output}
+	eqela:slingc src/eqela \
+		-target=netcore \
+		-PprojectType=console \
+		-Ptitle=${title} \
+		-Pversion=${version} \
+		-Pcopyright=${copyright} \
+		-Plicense=${license} \
+		-libdir=${eqela:jkop}/src \
+		-output=${output} \
+		-OstaticBuild=true \
+		-builder=${=expandCommand(eqela:rocks/builder)} -BdotnetPath=${eqela:dotnet} \
+		-Brelease=true -Btarget=${platform} $(*)
 	eqela:jsh cpto build/eqela/${name}_${version}_${platform} \
-		build/eqela/${platform}/*.dll \
-		build/eqela/${platform}/*.so \
-		build/eqela/${platform}/*.dylib \
-		build/eqela/${platform}/eqela \
-		build/eqela/${platform}/eqela.exe
+		${output}/*.dll \
+		${output}/*.so \
+		${output}/*.dylib \
+		${output}/eqela \
+		${output}/eqela.exe
 	eqela:jsh writeJsonMap build/eqela/${name}_${version}_${platform}/packageinfo.json \
 		vendor=eqela \
 		name=${name} \

@@ -277,6 +277,7 @@ func executeRundll(args as vector<CommandLineArgument>) private as bool
 	IFDEF "target_netx" {
 		var ss #used = new StringSet()
 		lang "cs" {{{
+			ss.add("System.Text.Encoding.CodePages");
 			System.Reflection.Assembly myAssembly = null;
 			try {
 				myAssembly = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(dll.getPath());

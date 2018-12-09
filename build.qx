@@ -21,7 +21,7 @@ use eqela:jsh:r4
 use eqela:dotnet:2.1.301
 use eqela:rocks:r7
 use eqela:jkop:20181118
-set version 5.0.2
+set version 5.0.3
 set name eqelart
 set title "Eqela Runtime"
 set copyright "Copyright (c) 2018 Eqela Oy"

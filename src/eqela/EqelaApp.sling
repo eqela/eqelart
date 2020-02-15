@@ -1,0 +1,214 @@
+
+/*
+ * This file is part of Eqela Runtime
+ * Copyright (c) 2018-2020 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+import jk.fs
+import jk.log
+import jk.env
+import jk.console
+import jk.http.client
+import jk.util.archive
+
+class:
+
+var repositories = new vector<string>
+
+ctor
+{
+	var repos = EnvironmentVariable.get("EQELA_TOOL_REPOS")
+	if not repos:
+		repos = "https://files.eqela.com/eqelart/tools"
+	repositories = String.split(repos, ' ')
+}
+
+func getToolDirectory(name as string, version as string) as File
+{
+	assert name
+	assert version
+	var dd = assert CommonPath.getHomeDirectory()
+	return dd.entry(".eqela").entry("6").entry("tools").entry(name).entry(version)
+}
+
+func installTool(ctx as LoggingContext, toolName as string, toolVersion as string, toolDir as File) as bool
+{
+	Log.debug(ctx, "Installing tool: toolName=`" .. toolName .. "', toolVersion=`" .. toolVersion .. "'")
+	if Vector.isEmpty(repositories):
+		Log.warning(ctx, "No repositories configured. Unable to download libraries.")
+	var client = new CustomWebClient()
+	foreach repo in repositories {
+		var sb = new StringBuilder()
+		sb.appendString(repo)
+		if String.endsWith(repo, "/") == false:
+			sb.appendCharacter('/')
+		sb.appendString(toolName)
+		sb.appendCharacter('-')
+		sb.appendString(toolVersion)
+		sb.appendString(".sapp")
+		var url = sb.toString()
+		var status as string
+		var data as buffer
+		Log.debug(ctx, "Trying to retrieve URL: `" .. url .. "' ..")
+		Log.status(ctx, "[Downloading] " .. url .. " .. ")
+		client.query("GET", url, null, null, func(rstatus as string, rheaders as KeyValueList<string,string>, rdata as buffer) {
+			status = rstatus
+			data = rdata
+		})
+		Log.status(ctx, null)
+		if status == "200" && data {
+			Log.debug(ctx, "Successfully downloaded: `" .. url .. "'")
+			var listener = func(file as File) {
+				Log.status(ctx, "[Installing] " .. file.getPath() .. " .. ")
+			}
+			var r = ZipReader.extractZipBufferToDirectory(data, toolDir, listener)
+			Log.status(ctx, null)
+			assert r:
+				Log.error(ctx, "Failed to install downloaded tool: `" .. toolName .. "-" .. toolVersion .. "'")
+			Log.info(ctx, "Tool installed: `" .. toolName .. "-" .. toolVersion .. "'")
+			return true
+		}
+		else {
+			Log.debug(ctx, "Download failed: `" .. url .. "', response status=`" .. status .. "'")
+		}
+	}
+	Log.error(ctx, "Unable to find and install tool: `" .. toolName .. "-" .. toolVersion .. "'")
+	return false
+}
+
+func readFirstLine(file as File) as string
+{
+	assert file
+	var it = assert file.readLines()
+	var v = it.next()
+	if it is Closable:
+		(it as! Closable).close()
+	return v
+}
+
+func execute(oargs as vector<string>) as int
+{
+	var args = oargs
+	var ctx = new ConsoleApplicationContext()
+	var cmd = Vector.get(args, 0)
+	Vector.removeFirst(args)
+	if cmd == "-v" || cmd == "-version" || cmd == "--version" {
+		println VALUE "projectVersion"
+		return 0
+	}
+	if cmd == "-debug" || cmd == "--debug" {
+		ctx.setShowDebug(true)
+		cmd = Vector.get(args, 0)
+		Vector.removeFirst(args)
+	}
+	var codeFile as File
+	var codeFileName as string
+	if cmd == "-x" || cmd == "-execute" || cmd == "--execute" {
+		codeFile = File.forPath(Vector.get(args, 0))
+		Vector.removeFirst(args)
+	}
+	else if String.endsWith(cmd, ".lz") || String.endsWith(cmd, ".lua") {
+		codeFile = File.forPath(cmd)
+	}
+	if codeFile:
+		codeFileName = codeFile.getBasenameWithoutExtension()
+	if not codeFile {
+		var script as string
+		if cmd == "-s" || cmd == "-script" || cmd == "--script" {
+			script = Vector.get(args, 0)
+			Vector.removeFirst(args)
+		}
+		else if String.endsWith(cmd, ".ss") || String.endsWith(cmd, ".es") {
+			script = cmd
+		}
+		if script {
+			var sf = File.forPath(script)
+			var firstLine = readFirstLine(sf)
+			if not firstLine {
+				Log.error(ctx, "Failed to read from script: `" .. sf.getPath() .. "'")
+				return -1
+			}
+			if String.startsWith(firstLine, "#! ") == false {
+				Log.error(ctx, "No shebang in script: `" .. sf.getPath() .. "'")
+				return -1
+			}
+			var eqelaidx = String.getIndexOfString(firstLine, " eqela ")
+			if eqelaidx < 0 {
+				Log.error(ctx, "Not an eqela script: `" .. sf.getPath() .. "'")
+				return -1
+			}
+			var argstr = String.getEndOfString(firstLine, eqelaidx + 7)
+			var myargs = String.split(argstr, ' ')
+			myargs += script
+			foreach arg in args:
+				myargs += arg
+			args = myargs
+			cmd = Vector.get(args, 0)
+			Vector.removeFirst(args)
+		}
+		if String.isEmpty(cmd) {
+			Log.info(ctx, "Usage: eqela [-v | -debug] <cmd | script> <parameters>")
+			return -1
+		}
+		var comps1 = String.split(cmd, ':', 2)
+		var xcmd = Vector.get(comps1, 0)
+		var executable = Vector.get(comps1, 1)
+		var comps = String.split(xcmd, '-', 2)
+		var cmdName = Vector.get(comps, 0)
+		var cmdVersion = Vector.get(comps, 1)
+		if String.isEmpty(executable):
+			executable = cmdName
+		if String.isEmpty(cmdName) || String.isEmpty(cmdVersion) {
+			// FIXME: We should have logic to determine the version if not specified.
+			Log.error(ctx, "Invalid command: `" .. cmd .. "'")
+			return -1
+		}
+		var td = getToolDirectory(cmdName, cmdVersion)
+		if td.isDirectory() {
+			Log.debug(ctx, "Tool `" .. cmd .. "' already installed: `" .. td.getPath() .. "'")
+		}
+		else {
+			if not installTool(ctx, cmdName, cmdVersion, td) {
+				Log.debug(ctx, "Failed to install tool: `" .. cmd .. "'")
+				return -1
+			}
+		}
+		var code = td.entry(executable .. ".lz")
+		if not code.isFile():
+			code = td.entry(executable .. ".lua")
+		if not code.isFile() {
+			Log.error(ctx, "Tool `" .. cmd .. "' does not have code file: `" .. code.getPath() .. "'")
+			return -1
+		}
+		// FIXME: Support a manifest file that can specify a sushi version for the tool.
+		// Then download and save the sushi executable for the current platform and use it to
+		// run the tool.
+		codeFile = code
+		codeFileName = executable
+	}
+	var codeBuffer = codeFile.getContentsBuffer()
+	if not codeBuffer {
+		Log.error(ctx, "Failed to read code file: `" .. codeFile.getPath() .. "'")
+		return -1
+	}
+	var status = lang "lua" int {{{ _vm:execute_program(codeBuffer, codeFileName, args) }}}
+	Log.debug(ctx, "Tool `" .. codeFile.getPath() .. "' return with status " .. String.forInteger(status))
+	return status
+}
+
+main
+{
+	var argv = new vector<string>
+	foreach arg in args:
+		argv += arg
+	return new this().execute(argv)
+}

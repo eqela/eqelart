@@ -18,6 +18,6 @@ eqela build.ss VERSION_NUMBER
 
 Precompiled versions are available for download:
 
-* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.1_macos.zip>
-* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.1_ubuntu1804.zip>
-* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.1_win32.zip>
+* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.2_macos.zip>
+* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.2_ubuntu1804.zip>
+* <https://files.eqela.com/eqelart/6.x/eqelart-6.0.2_win32.zip>

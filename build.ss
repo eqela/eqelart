@@ -1,4 +1,4 @@
-#! eqela sling-r110
+#! eqela sling-r111
 #
 # This file is part of Eqela Runtime
 # Copyright (c) 2018-2020 Eqela Oy
@@ -13,8 +13,7 @@
 # GNU General Public License for more details.
 #
 
-lib scf:r110
-lib sling:r110
+lib sling:r111
 import jk.lang
 import jk.fs
 import sling.build
@@ -37,7 +36,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200306-ubuntu1804"
+		"vm" : "sushi/sushi-20200307-ubuntu1804"
 	})
 	Compiler.compileApp({
 		"source" : "src/eqela",
@@ -45,7 +44,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200306-macos"
+		"vm" : "sushi/sushi-20200307-macos"
 	})
 	Compiler.compileApp({
 		"source" : "src/eqela",
@@ -53,7 +52,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200306-win32.exe"
+		"vm" : "sushi/sushi-20200307-win32.exe"
 	})
 	Context.print(Zip.compress(appoutput_ubuntu1804))
 	Context.print(Zip.compress(appoutput_macos))

@@ -36,7 +36,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200307-ubuntu1804"
+		"vm" : "sushi/sushi-20200308-ubuntu1804"
 	})
 	Compiler.compileApp({
 		"source" : "src/eqela",

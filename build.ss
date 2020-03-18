@@ -36,7 +36,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200308-ubuntu1804"
+		"vm" : "sushi/sushi-20200318-ubuntu1804"
 	})
 	Compiler.compileApp({
 		"source" : "src/eqela",
@@ -44,7 +44,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200307-macos"
+		"vm" : "sushi/sushi-20200318-macos"
 	})
 	Compiler.compileApp({
 		"source" : "src/eqela",
@@ -52,7 +52,7 @@ Context.execute(func {
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200307-win32.exe"
+		"vm" : "sushi/sushi-20200318-win32.exe"
 	})
 	Context.print(Zip.compress(appoutput_ubuntu1804))
 	Context.print(Zip.compress(appoutput_macos))

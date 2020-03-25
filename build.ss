@@ -1,4 +1,4 @@
-#! eqela sling-r111
+#! eqela sling-r118
 #
 # This file is part of Eqela Runtime
 # Copyright (c) 2018-2020 Eqela Oy
@@ -13,51 +13,70 @@
 # GNU General Public License for more details.
 #
 
-lib sling:r111
+lib sling:r118
 import jk.lang
 import jk.fs
-import sling.build
+import jk.script
+import sling.compiler
+import jk.util.archive
+import jk.util.download
 
-Context.execute(func {
-	var version = args[0]
-	if String.isEmpty(version) {
-		Context.info("Usage: build.ss <version>")
-		return
-	}
+var sushiVersion = "v1.0.1"
+
+var script = new Script()
+var compiler = new SlingCompilerKit(script.ctx)
+var archive = new ArchiveKit(script.ctx)
+var file = new FileKit(script.ctx)
+var download = new DownloadKit(script.ctx)
+
+script.command("release", func(args) {
+	var version = script.requireParameter(args, 0, "version")
+	download.downloadAndExtract("https://github.com/eqela/sushivm/releases/download/" .. sushiVersion .. "/sushi_" .. sushiVersion .. "_linux.zip", "build/sushi_linux_" .. sushiVersion)
+	download.downloadAndExtract("https://github.com/eqela/sushivm/releases/download/" .. sushiVersion .. "/sushi_" .. sushiVersion .. "_macos.zip", "build/sushi_macos_" .. sushiVersion)
+	download.downloadAndExtract("https://github.com/eqela/sushivm/releases/download/" .. sushiVersion .. "/sushi_" .. sushiVersion .. "_win32.zip", "build/sushi_win32_" .. sushiVersion)
 	var outputdir = "build/eqelart-release-" .. version
 	var appoutput = outputdir .. "/eqelart-" .. version
-	var appoutput_ubuntu1804 = appoutput .. "_ubuntu1804"
+	var appoutput_linux = appoutput .. "_linux"
 	var appoutput_macos = appoutput .. "_macos"
 	var appoutput_win32 = appoutput .. "_win32"
 	var workdir = "build/workdir_" .. version
-	Compiler.compileApp({
+	compiler.compileApp({
 		"source" : "src/eqela",
-		"output" : appoutput_ubuntu1804,
+		"output" : appoutput_linux,
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200318-ubuntu1804"
+		"vm" : "build/sushi_linux_" .. sushiVersion .. "/sushi"
 	})
-	Compiler.compileApp({
+	compiler.compileApp({
 		"source" : "src/eqela",
 		"output" : appoutput_macos,
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200318-macos"
+		"vm" : "build/sushi_macos_" .. sushiVersion .. "/sushi"
 	})
-	Compiler.compileApp({
+	compiler.compileApp({
 		"source" : "src/eqela",
 		"output" : appoutput_win32,
 		"workdir" : workdir,
 		"version" : version,
 		"wrapvm" : true,
-		"vm" : "sushi/sushi-20200318-win32.exe"
+		"vm" : "build/sushi_win32_" .. sushiVersion .. "/sushi.exe"
 	})
-	Context.print(Zip.compress(appoutput_ubuntu1804))
-	Context.print(Zip.compress(appoutput_macos))
-	Context.print(Zip.compress(appoutput_win32))
-	File.forPath(appoutput_ubuntu1804).removeRecursive()
-	File.forPath(appoutput_macos).removeRecursive()
-	File.forPath(appoutput_win32).removeRecursive()
+	file.copy("LICENSE", appoutput_linux)
+	file.copy("LICENSE", appoutput_macos)
+	file.copy("LICENSE", appoutput_win32)
+	script.print(archive.compressZip(appoutput_linux))
+	script.print(archive.compressZip(appoutput_macos))
+	script.print(archive.compressZip(appoutput_win32))
+	file.remove(appoutput_linux)
+	file.remove(appoutput_macos)
+	file.remove(appoutput_win32)
 })
+
+script.command("clean", func(args) {
+	file.remove("build")
+})
+
+script.main(args)

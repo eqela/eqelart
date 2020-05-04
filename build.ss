@@ -21,7 +21,7 @@ import sling.compiler
 import jk.util.archive
 import jk.util.download
 
-var sushiVersion = "v1.0.2"
+var sushiVersion = "v1.0.4"
 
 var script = new Script()
 var compiler = new SlingCompilerKit(script.ctx)

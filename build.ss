@@ -1,4 +1,4 @@
-#! eqela ss-0.14 -debug
+#! eqela ss-0.14
 #
 # This file is part of Eqela Runtime
 # Copyright (c) 2018-2020 Eqela Oy

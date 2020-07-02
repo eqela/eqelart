@@ -18,7 +18,7 @@ import jk.log
 import jk.env
 import jk.console
 import jk.http.client
-import jk.util.archive
+import jk.archive
 
 class:
 
@@ -36,7 +36,9 @@ func getToolDirectory(name as string, version as string) as File
 {
 	assert name
 	assert version
-	var dd = assert CommonPath.getHomeDirectory()
+	var dd = CommonPath.getHomeDirectory()
+	if not dd:
+		dd = File.forPath("/")
 	return dd.entry(".eqela").entry("6").entry("tools").entry(name).entry(version)
 }
 

@@ -17,6 +17,5 @@ vendorId = "eqela"
 projectId = "eqelart"
 copyright = "Copyright (c) 2018-2020 Eqela Oy"
 license = "Licensed under GPL3 (see LICENSE for details)"
-libraries = [
-    "jkop:20200215"
-]
+libraries += "jk-core:0.11.0"
+libraries += "jk-net:0.11.0"

@@ -1,4 +1,4 @@
-#! eqela sling-r118
+#! eqela ss-0.14 -debug
 #
 # This file is part of Eqela Runtime
 # Copyright (c) 2018-2020 Eqela Oy
@@ -13,18 +13,19 @@
 # GNU General Public License for more details.
 #
 
-lib sling:r118
+lib sling:0.18.0
+lib jk-devops:0.12.0
 import jk.lang
 import jk.fs
 import jk.script
-import sling.compiler
-import jk.util.archive
-import jk.util.download
+import scf.sling.sushi
+import jk.archive
+import jk.devops.download
 
 var sushiVersion = "v1.0.4"
 
 var script = new Script()
-var compiler = new SlingCompilerKit(script.ctx)
+var compiler = new SlingToSushiCompilerKit(script.ctx)
 var archive = new ArchiveKit(script.ctx)
 var file = new FileKit(script.ctx)
 var download = new DownloadKit(script.ctx)

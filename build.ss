@@ -22,7 +22,7 @@ import scf.sling.sushi
 import jk.archive
 import jk.devops.download
 
-var sushiVersion = "v1.0.4"
+var sushiVersion = "v1.1.0"
 
 var script = new Script()
 var compiler = new SlingToSushiCompilerKit(script.ctx)
